@@ -1,6 +1,10 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState } from 'react'
 import './App.css'
 import type { AnalysisResult, UploadResumeResponse } from './types'
+import { AnimatedBackground } from './components/reactbits/AnimatedBackground'
+import { BlurText } from './components/reactbits/BlurText'
+import { CardNav } from './components/reactbits/CardNav'
+import { FolderUpload } from './components/reactbits/FolderUpload'
 
 function App() {
   const [resumeText, setResumeText] = useState('')
@@ -12,8 +16,6 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [showPasteOption, setShowPasteOption] = useState(false)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isDragging, setIsDragging] = useState(false)
 
   const handleFileUpload = async (file: File) => {
     // Validate file
@@ -76,39 +78,9 @@ function App() {
     }
   }
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }, [])
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    
-    const file = e.dataTransfer.files[0]
-    if (file) {
-      handleFileUpload(file)
-    }
-  }, [])
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      handleFileUpload(file)
-    }
-  }
-
   const removeFile = () => {
     setUploadedFile(null)
     setResumeText('')
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
   }
 
   const handleAnalyze = async () => {
@@ -165,31 +137,50 @@ function App() {
     }
   }
 
-  const calculateScoreBreakdown = (score: number) => {
-    // Estimate breakdown (backend doesn't return this, so we estimate)
-    // Semantic is 60% weight, Keywords is 40% weight
-    // If score is high, both components are likely high
-    const semanticEstimate = score * 0.6
-    const keywordEstimate = score * 0.4
+  const getScoreBreakdown = () => {
+    if (result?.scoreBreakdown) {
+      // Use actual backend data if available
+      return {
+        semantic: result.scoreBreakdown.semanticScore,
+        keywords: result.scoreBreakdown.keywordScore,
+        evidence: result.scoreBreakdown.evidenceScore || 0
+      }
+    }
+    // Fallback estimation
+    const semanticEstimate = result ? result.score * 0.35 : 0
+    const keywordEstimate = result ? result.score * 0.55 : 0
+    const evidenceEstimate = result ? result.score * 0.10 : 0
     return {
-      semantic: Math.min(100, semanticEstimate * 1.2), // Slight adjustment for visual
-      keywords: Math.min(100, keywordEstimate * 1.3)
+      semantic: Math.min(100, semanticEstimate * 1.2),
+      keywords: Math.min(100, keywordEstimate * 1.3),
+      evidence: Math.min(100, evidenceEstimate * 1.5)
     }
   }
 
-  const breakdown = result ? calculateScoreBreakdown(result.score) : null
+  const breakdown = result ? getScoreBreakdown() : null
+  
+  // Determine current step for CardNav
+  const getCurrentStep = () => {
+    if (result) return 3
+    if (resumeText.trim() && jobText.trim()) return 2
+    if (resumeText.trim() || uploadedFile) return 1
+    return 1
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen relative">
+      {/* Animated Background */}
+      <AnimatedBackground />
+      
       {/* Navbar */}
-      <nav className="bg-white/80 backdrop-blur-sm border-b border-gray-200 shadow-sm sticky top-0 z-50">
+      <nav className="relative bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700 shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 max-w-7xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 ResuMate AI
               </h1>
-              <span className="px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded-full">
+              <span className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30 rounded-full">
                 Local AI
               </span>
             </div>
@@ -197,137 +188,114 @@ function App() {
         </div>
       </nav>
 
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="relative z-10 container mx-auto px-4 py-12 max-w-7xl">
         {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            Match Your Resume to Your Dream Job
+        <div className="text-center mb-16">
+          <h2 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 dark:text-slate-100 mb-6">
+            <BlurText text="Match Your Resume" delay={0} className="block mb-2" />
+            <BlurText text="to Your Dream Job" delay={200} className="block" />
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-slate-300 max-w-3xl mx-auto mb-8">
             Upload your resume and job description to get instant AI-powered matching scores, 
             keyword analysis, and actionable insights to optimize your application.
           </p>
+          {!result && (
+            <button
+              onClick={() => {
+                if (!resumeText.trim() && !uploadedFile) {
+                  document.querySelector('input[type="file"]')?.click()
+                }
+              }}
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-lg rounded-xl shadow-xl transition-all transform hover:scale-105"
+            >
+              Analyze Resume
+            </button>
+          )}
         </div>
+
+        {/* 3-Step Navigation */}
+        {!result && (
+          <CardNav
+            steps={[
+              {
+                number: 1,
+                title: 'Upload Resume',
+                description: 'Drag & drop or choose your resume file (PDF, DOCX, TXT)'
+              },
+              {
+                number: 2,
+                title: 'Add Job Description',
+                description: 'Paste the job description you want to match against'
+              },
+              {
+                number: 3,
+                title: 'Get Results',
+                description: 'View your match score, insights, and optimization tips'
+              }
+            ]}
+            currentStep={getCurrentStep()}
+          />
+        )}
 
         {/* Upload Section */}
         <div className="mb-8">
-          {!uploadedFile && !showPasteOption ? (
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${
-                isDragging
-                  ? 'border-blue-500 bg-blue-50 scale-[1.02]'
-                  : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/50'
-              }`}
-            >
-              <div className="max-w-md mx-auto">
-                <svg
-                  className="mx-auto h-16 w-16 text-gray-400 mb-4"
-                  stroke="currentColor"
-                  fill="none"
-                  viewBox="0 0 48 48"
-                >
-                  <path
-                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Drop your resume here
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Supports PDF, DOCX, and TXT files (max 5MB)
-                </p>
-                <div className="flex gap-4 justify-center">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all hover:shadow-xl"
-                  >
-                    Choose File
-                  </button>
-                  <button
-                    onClick={() => setShowPasteOption(true)}
-                    className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-all"
-                  >
-                    Paste Text Instead
-                  </button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
-            </div>
-          ) : showPasteOption ? (
-            <div className="bg-white rounded-xl shadow-lg p-6">
+          {!showPasteOption ? (
+            <FolderUpload
+              onFileSelect={handleFileUpload}
+              uploadedFile={uploadedFile}
+              onRemove={removeFile}
+              uploading={uploading}
+            />
+          ) : (
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-slate-700">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Paste Resume Text</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Paste Resume Text</h3>
                 <button
                   onClick={() => {
                     setShowPasteOption(false)
                     setResumeText('')
                   }}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
                 >
                   ← Back to Upload
                 </button>
               </div>
               <textarea
-                className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full h-48 p-4 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100"
                 placeholder="Paste your resume text here..."
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
               />
             </div>
-          ) : (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{uploadedFile?.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {(uploadedFile?.size || 0) / 1024} KB
-                      {uploading && ' • Uploading...'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={removeFile}
-                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
+          )}
+          
+          {/* Paste text fallback button */}
+          {!uploadedFile && !showPasteOption && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setShowPasteOption(true)}
+                className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 underline"
+              >
+                Or paste resume text instead
+              </button>
             </div>
           )}
         </div>
 
         {/* Job Description Input */}
         <div className="mb-8">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <label htmlFor="job" className="block text-lg font-semibold text-gray-900 mb-3">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-slate-700">
+            <label htmlFor="job" className="block text-lg font-semibold text-gray-900 dark:text-slate-100 mb-3">
               Job Description
             </label>
             <textarea
               id="job"
-              className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full h-48 p-4 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100"
               placeholder="Paste the job description here...\n\nExample: Seeking a software engineer with 5+ years of experience in Python, React, and cloud technologies..."
               value={jobText}
               onChange={(e) => setJobText(e.target.value)}
             />
-            <div className="mt-2 text-sm text-gray-500 text-right">
+            <div className="mt-2 text-sm text-gray-500 dark:text-slate-400 text-right">
               {jobText.length} characters
             </div>
           </div>
@@ -424,31 +392,69 @@ function App() {
                 {/* Score Breakdown */}
                 {breakdown && (
                   <div className="flex-1 max-w-md space-y-4">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Score Breakdown</h3>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-4">Score Breakdown</h3>
                     <div>
                       <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">Semantic Match (60%)</span>
-                        <span className="text-sm font-bold text-blue-600">{breakdown.semantic.toFixed(1)}</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                          Keyword Match (55%)
+                        </span>
+                        <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{breakdown.keywords.toFixed(1)}</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
                         <div
                           className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-1000"
-                          style={{ width: `${breakdown.semantic}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">Keyword Match (40%)</span>
-                        <span className="text-sm font-bold text-indigo-600">{breakdown.keywords.toFixed(1)}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-1000"
                           style={{ width: `${breakdown.keywords}%` }}
                         ></div>
                       </div>
                     </div>
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                          Semantic Match (35%)
+                        </span>
+                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{breakdown.semantic.toFixed(1)}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-1000"
+                          style={{ width: `${breakdown.semantic}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    {breakdown && breakdown.evidence > 0 && (
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                            Evidence Score (10%)
+                          </span>
+                          <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{breakdown.evidence.toFixed(1)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-1000"
+                            style={{ width: `${breakdown.evidence}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    {result?.scoreBreakdown?.capApplied && (
+                      <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">Score Capped at 70</p>
+                        <p className="text-xs text-yellow-600 dark:text-yellow-500">Due to missing must-have requirements</p>
+                      </div>
+                    )}
+                    {result?.scoreBreakdown?.mustHavePenalty > 0 && (
+                      <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">Penalty Applied: -{result.scoreBreakdown.mustHavePenalty.toFixed(0)} points</p>
+                        <p className="text-xs text-red-600 dark:text-red-500">{result.scoreBreakdown.missingMustHaveCount} must-have skill(s) missing</p>
+                      </div>
+                    )}
+                    {result?.mustHaveMissing && result.mustHaveMissing.length > 0 && (
+                      <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">Missing Required Skills:</p>
+                        <p className="text-xs text-red-600 dark:text-red-500">{result.mustHaveMissing.join(', ')}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

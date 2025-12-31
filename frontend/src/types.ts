@@ -12,6 +12,18 @@ export interface AnalysisResult {
     atsTips: string[]
   }
   rewrittenBullets: string[]
+  // New ATS-like fields (optional for backward compatibility)
+  scoreBreakdown?: {
+    finalScore: number
+    keywordScore: number
+    semanticScore: number
+    evidenceScore: number
+    capApplied: boolean
+    mustHavePenalty: number
+    missingMustHaveCount: number
+  }
+  mustHaveMissing?: string[]
+  preferredMissing?: string[]
 }
 
 export interface UploadResumeResponse {
