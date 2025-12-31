@@ -28,6 +28,10 @@ class AnalyzeResponse(BaseModel):
     missingKeywords: List[str] = Field(..., description="Missing skills/keywords from job description")
     insights: dict = Field(..., description="Analysis insights including strengths, improvements, and ATS tips")
     rewrittenBullets: List[str] = Field(..., description="Three rewritten resume bullets in FAANG style")
+    # Enhanced ATS-like fields
+    scoreBreakdown: Optional[dict] = Field(None, description="Detailed score breakdown with keyword, semantic, evidence scores, cap, and penalty")
+    mustHaveMissing: Optional[List[str]] = Field(None, description="Must-have requirements missing from resume")
+    preferredMissing: Optional[List[str]] = Field(None, description="Preferred skills missing from resume")
 
 
 class UploadResumeResponse(BaseModel):

@@ -1,0 +1,181 @@
+{
+  "skills": {
+    "Python": {
+      "aliases": ["py", "python3", "python2"],
+      "category": "programming_language"
+    },
+    "JavaScript": {
+      "aliases": ["js", "javascript", "ecmascript", "java script"],
+      "category": "programming_language"
+    },
+    "TypeScript": {
+      "aliases": ["ts", "typescript"],
+      "category": "programming_language"
+    },
+    "Java": {
+      "aliases": ["java"],
+      "category": "programming_language"
+    },
+    "C++": {
+      "aliases": ["cpp", "cplusplus", "c plus plus"],
+      "category": "programming_language"
+    },
+    "C#": {
+      "aliases": ["csharp", "c sharp", "c#"],
+      "category": "programming_language"
+    },
+    "Go": {
+      "aliases": ["golang", "go lang"],
+      "category": "programming_language"
+    },
+    "Rust": {
+      "aliases": ["rust"],
+      "category": "programming_language"
+    },
+    "React": {
+      "aliases": ["reactjs", "react.js", "react js"],
+      "category": "framework"
+    },
+    "Vue.js": {
+      "aliases": ["vue", "vuejs", "vue.js"],
+      "category": "framework"
+    },
+    "Angular": {
+      "aliases": ["angularjs", "angular.js"],
+      "category": "framework"
+    },
+    "Node.js": {
+      "aliases": ["node", "nodejs", "node.js"],
+      "category": "framework"
+    },
+    "Express": {
+      "aliases": ["expressjs", "express.js"],
+      "category": "framework"
+    },
+    "FastAPI": {
+      "aliases": ["fast api", "fast-api"],
+      "category": "framework"
+    },
+    "Django": {
+      "aliases": ["django"],
+      "category": "framework"
+    },
+    "Flask": {
+      "aliases": ["flask"],
+      "category": "framework"
+    },
+    "Spring": {
+      "aliases": ["spring framework", "springboot", "spring boot"],
+      "category": "framework"
+    },
+    "SQL": {
+      "aliases": ["sql", "structured query language"],
+      "category": "database"
+    },
+    "PostgreSQL": {
+      "aliases": ["postgres", "postgresql", "postgres db"],
+      "category": "database"
+    },
+    "MySQL": {
+      "aliases": ["mysql", "my sql"],
+      "category": "database"
+    },
+    "MongoDB": {
+      "aliases": ["mongo", "mongodb"],
+      "category": "database"
+    },
+    "Redis": {
+      "aliases": ["redis"],
+      "category": "database"
+    },
+    "AWS": {
+      "aliases": ["amazon web services", "amazon aws"],
+      "category": "cloud"
+    },
+    "Azure": {
+      "aliases": ["microsoft azure", "azure cloud"],
+      "category": "cloud"
+    },
+    "GCP": {
+      "aliases": ["google cloud platform", "google cloud", "gcp"],
+      "category": "cloud"
+    },
+    "Docker": {
+      "aliases": ["docker", "docker container"],
+      "category": "devops"
+    },
+    "Kubernetes": {
+      "aliases": ["k8s", "kubernetes", "kube"],
+      "category": "devops"
+    },
+    "Git": {
+      "aliases": ["git", "version control"],
+      "category": "devops"
+    },
+    "CI/CD": {
+      "aliases": ["cicd", "continuous integration", "continuous deployment"],
+      "category": "devops"
+    },
+    "TensorFlow": {
+      "aliases": ["tensorflow", "tf"],
+      "category": "ml_ai"
+    },
+    "PyTorch": {
+      "aliases": ["pytorch", "torch"],
+      "category": "ml_ai"
+    },
+    "Pandas": {
+      "aliases": ["pandas", "pd"],
+      "category": "ml_ai"
+    },
+    "NumPy": {
+      "aliases": ["numpy", "np"],
+      "category": "ml_ai"
+    },
+    "Scikit-learn": {
+      "aliases": ["sklearn", "scikit learn", "scikit-learn"],
+      "category": "ml_ai"
+    },
+    "Machine Learning": {
+      "aliases": ["ml", "machine learning", "ml algorithms"],
+      "category": "ml_ai"
+    },
+    "Deep Learning": {
+      "aliases": ["dl", "deep learning", "neural networks"],
+      "category": "ml_ai"
+    },
+    "REST API": {
+      "aliases": ["rest", "restful", "rest api", "restful api"],
+      "category": "api"
+    },
+    "GraphQL": {
+      "aliases": ["graphql", "graph ql"],
+      "category": "api"
+    },
+    "Microservices": {
+      "aliases": ["microservices", "micro services", "microservice architecture"],
+      "category": "architecture"
+    },
+    "Agile": {
+      "aliases": ["agile", "agile methodology", "scrum"],
+      "category": "methodology"
+    },
+    "Linux": {
+      "aliases": ["linux", "unix"],
+      "category": "os"
+    },
+    "HTML": {
+      "aliases": ["html", "html5"],
+      "category": "web"
+    },
+    "CSS": {
+      "aliases": ["css", "css3"],
+      "category": "web"
+    },
+    "TypeScript": {
+      "aliases": ["ts", "typescript"],
+      "category": "programming_language"
+    }
+  }
+}
+

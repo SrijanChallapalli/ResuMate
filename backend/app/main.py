@@ -22,7 +22,12 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite default ports
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ],  # Vite default ports
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -150,28 +155,53 @@ async def analyze_resume_job(request: AnalyzeRequest):
         raise HTTPException(status_code=503, detail="Model not loaded. Please wait for startup.")
     
     try:
-        # Calculate match score
-        score, matched_keywords, missing_keywords = scorer.calculate_match_score(
+        # Calculate comprehensive ATS-like hybrid match score
+        score_result = scorer.score_match(
             request.resumeText,
             request.jobText
         )
         
-        # Get top matches and missing keywords
-        top_matches = scorer.get_top_matches(matched_keywords, limit=10)
-        missing = scorer.get_missing_keywords(missing_keywords, limit=10)
+        final_score = score_result['finalScore']
+        top_matches = score_result['topMatches']
+        missing = score_result['missingKeywords']
+        must_have_missing = score_result.get('mustHaveMissing', [])
+        preferred_missing = score_result.get('preferredMissing', [])
+        was_truncated = score_result.get('wasTruncated', False)
         
-        # Generate insights
-        insights = generate_insights(score, top_matches, missing)
+        # Build score breakdown
+        score_breakdown = {
+            'finalScore': score_result.get('finalScore', 0),
+            'keywordScore': score_result.get('keywordScore', 0),
+            'semanticScore': score_result.get('semanticScore', 0),
+            'evidenceScore': score_result.get('evidenceScore', 0),
+            'capApplied': score_result.get('capApplied', False),
+            'mustHavePenalty': score_result.get('mustHavePenalty', 0),
+            'missingMustHaveCount': score_result.get('missingMustHaveCount', 0)
+        }
+        
+        # Generate insights with new data
+        insights = generate_insights(
+            final_score, 
+            top_matches, 
+            missing,
+            must_have_missing,
+            preferred_missing,
+            score_breakdown,
+            was_truncated
+        )
         
         # Rewrite resume bullets
         rewritten_bullets = rewriter.rewrite_bullets(request.resumeText, count=3)
         
         return AnalyzeResponse(
-            score=round(score, 1),
+            score=final_score,
             topMatches=top_matches,
             missingKeywords=missing,
             insights=insights,
-            rewrittenBullets=rewritten_bullets
+            rewrittenBullets=rewritten_bullets,
+            scoreBreakdown=score_breakdown,
+            mustHaveMissing=must_have_missing if must_have_missing else None,
+            preferredMissing=preferred_missing if preferred_missing else None
         )
     
     except Exception as e:
@@ -180,14 +210,55 @@ async def analyze_resume_job(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail="Analysis failed. Please check your input.")
 
 
-def generate_insights(score: float, top_matches: List[str], missing: List[str]) -> dict:
+def generate_insights(
+    score: float, 
+    top_matches: List[str], 
+    missing: List[str],
+    must_have_missing: List[str] = None,
+    preferred_missing: List[str] = None,
+    score_breakdown: dict = None,
+    was_truncated: bool = False
+) -> dict:
     """
-    Generate insights based on match score and keywords.
+    Generate insights based on match score, keywords, and ATS analysis.
     Returns strengths, improvements, and ATS tips.
     """
+    if must_have_missing is None:
+        must_have_missing = []
+    if preferred_missing is None:
+        preferred_missing = []
+    if score_breakdown is None:
+        score_breakdown = {}
+    
     strengths = []
     improvements = []
     ats_tips = []
+    
+    # Truncation notice
+    if was_truncated:
+        improvements.append(
+            "Note: Your resume or job description was truncated for processing. "
+            "Very long documents may affect scoring accuracy."
+        )
+    
+    # Must-have requirements insights (highest priority)
+    if must_have_missing:
+        improvements.append(
+            f"Missing required skills: {', '.join(must_have_missing[:5])}. "
+            "These are must-have requirements and will significantly limit your application. "
+            "Add these skills if you have experience with them."
+        )
+        ats_tips.append(
+            "Address missing must-have requirements first. "
+            "ATS systems often reject resumes missing required qualifications."
+        )
+    
+    # Preferred skills insights
+    if preferred_missing and len(preferred_missing) > 0:
+        improvements.append(
+            f"Consider adding preferred skills if applicable: {', '.join(preferred_missing[:3])}. "
+            "These can strengthen your application."
+        )
     
     # Score-based insights
     if score >= 80:
@@ -197,12 +268,52 @@ def generate_insights(score: float, top_matches: List[str], missing: List[str]) 
     else:
         improvements.append("Consider tailoring your resume more closely to the job description.")
     
+    # Score breakdown insights
+    keyword_score = score_breakdown.get('keywordScore', 0)
+    semantic_score = score_breakdown.get('semanticScore', 0)
+    evidence_score = score_breakdown.get('evidenceScore', 0)
+    
+    if keyword_score < 50:
+        improvements.append(
+            f"Keyword match is low ({keyword_score:.1f}/100). "
+            "Add more relevant skills and keywords from the job description."
+        )
+    elif keyword_score >= 70:
+        strengths.append(f"Strong keyword alignment ({keyword_score:.1f}/100).")
+    
+    if semantic_score < 50:
+        improvements.append(
+            f"Semantic similarity is low ({semantic_score:.1f}/100). "
+            "Consider rephrasing your experience to better match the job description's language."
+        )
+    elif semantic_score >= 70:
+        strengths.append(f"Strong semantic alignment ({semantic_score:.1f}/100).")
+    
+    if evidence_score < 30:
+        improvements.append(
+            f"Evidence score is low ({evidence_score:.1f}/100). "
+            "Add quantified achievements and show skills used in context with action verbs."
+        )
+    elif evidence_score >= 60:
+        strengths.append(f"Strong evidence of impact ({evidence_score:.1f}/100).")
+    
+    # Cap and penalty insights
+    if score_breakdown.get('capApplied', False):
+        improvements.append(
+            f"Score capped at 70 due to missing must-have requirements. "
+            f"Penalty applied: -{score_breakdown.get('mustHavePenalty', 0):.0f} points."
+        )
+    
     # Keyword-based insights
     if top_matches:
-        strengths.append(f"Strong alignment with key terms: {', '.join(top_matches[:5])}")
+        must_have_matched = [m for m in top_matches if m in (must_have_missing or [])]
+        if must_have_matched:
+            strengths.append(f"Strong alignment with required skills: {', '.join(must_have_matched[:3])}")
+        else:
+            strengths.append(f"Strong alignment with key skills: {', '.join(top_matches[:5])}")
     
     if missing:
-        improvements.append(f"Consider adding these keywords: {', '.join(missing[:5])}")
+        improvements.append(f"Consider adding these skills/keywords: {', '.join(missing[:5])}")
     
     # ATS optimization tips
     ats_tips.extend([
@@ -213,7 +324,8 @@ def generate_insights(score: float, top_matches: List[str], missing: List[str]) 
         "Save your resume as a .txt or .docx file for best ATS compatibility.",
         "Use standard date formats (MM/YYYY or Month YYYY).",
         "Include a 'Skills' section with relevant technical terms.",
-        "Quantify achievements with numbers, percentages, and metrics."
+        "Quantify achievements with numbers, percentages, and metrics.",
+        "Show skills in context: use action verbs (built, developed, implemented) near skill names."
     ])
     
     # Additional score-specific tips
