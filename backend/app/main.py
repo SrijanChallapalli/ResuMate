@@ -7,8 +7,9 @@ from typing import List
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer
-from app.schemas import AnalyzeRequest, AnalyzeResponse, UploadResumeResponse
+from app.schemas import AnalyzeRequest, AnalyzeResponse, UploadResumeResponse, PremiumAnalyzeResponse
 from app.scoring import ResumeScorer
+from app.premium_scoring import PremiumScorer
 from app.rewrite import ResumeRewriter
 from app.file_extractor import FileExtractor
 
@@ -36,13 +37,14 @@ app.add_middleware(
 # Global model and processors (loaded once at startup)
 model: SentenceTransformer = None
 scorer: ResumeScorer = None
+premium_scorer: PremiumScorer = None
 rewriter: ResumeRewriter = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Load ML model and initialize processors on startup."""
-    global model, scorer, rewriter
+    global model, scorer, premium_scorer, rewriter
     
     try:
         # Load sentence transformer model (local, no external API)
@@ -51,6 +53,7 @@ async def startup_event():
         print("Model loaded successfully.")
         
         scorer = ResumeScorer(model)
+        premium_scorer = PremiumScorer(model, scorer)
         rewriter = ResumeRewriter()
         
     except Exception as e:
@@ -208,6 +211,160 @@ async def analyze_resume_job(request: AnalyzeRequest):
         # Log error but don't expose internal details
         print(f"Analysis error: {e}")
         raise HTTPException(status_code=500, detail="Analysis failed. Please check your input.")
+
+
+@app.post("/api/upload-resume-premium", response_model=UploadResumeResponse)
+async def upload_resume_premium(file: UploadFile = File(...)):
+    """
+    Upload and extract text from resume file (PDF, DOCX, or TXT) for premium analysis.
+    
+    Returns extracted text and metadata.
+    (Same as /api/upload-resume, but separate endpoint for premium mode)
+    """
+    try:
+        # Log request details (without file content)
+        filename = file.filename or "unknown"
+        content_type = file.content_type or "unknown"
+        print(f"[UPLOAD-PREMIUM] Route hit: /api/upload-resume-premium")
+        print(f"[UPLOAD-PREMIUM] Filename: {filename}, Content-Type: {content_type}")
+        
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+        print(f"[UPLOAD-PREMIUM] File size: {file_size} bytes")
+        
+        # Handle missing filename (can happen with drag-drop)
+        if not file.filename:
+            # Try to infer from content-type or use default
+            if content_type == "application/pdf":
+                filename = "resume.pdf"
+            elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                filename = "resume.docx"
+            elif content_type == "text/plain":
+                filename = "resume.txt"
+            else:
+                filename = "resume.txt"  # Default fallback
+            print(f"[UPLOAD-PREMIUM] Filename was None, using inferred: {filename}")
+        
+        # Validate file
+        is_valid, error_msg = FileExtractor.validate_file(filename, file_size)
+        if not is_valid:
+            print(f"[UPLOAD-PREMIUM] Validation failed: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Extract text
+        try:
+            print(f"[UPLOAD-PREMIUM] Extracting text from {filename}")
+            extracted_text, meta = FileExtractor.extract_text(file_content, filename)
+            print(f"[UPLOAD-PREMIUM] Extraction successful. Text length: {len(extracted_text)} chars")
+        except ValueError as e:
+            print(f"[UPLOAD-PREMIUM] Extraction ValueError: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            print(f"[UPLOAD-PREMIUM] Extraction error: {type(e).__name__}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to extract text from file. Please try a different file format.")
+        
+        return UploadResumeResponse(
+            resumeText=extracted_text,
+            meta=meta
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[UPLOAD-PREMIUM] Unexpected error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="File upload failed. Please try again.")
+
+
+@app.post("/api/analyze-premium", response_model=PremiumAnalyzeResponse)
+async def analyze_resume_job_premium(request: AnalyzeRequest):
+    """
+    Premium analysis using industry-standard ranking pipeline:
+    - BM25 keyword scoring
+    - Semantic retrieval via bi-encoder
+    - Cross-encoder reranking
+    - Evidence scoring
+    - Sigmoid calibration
+    
+    Returns:
+    - Calibrated match score (0-100)
+    - Top matching keywords
+    - Missing keywords
+    - Insights (strengths, improvements, ATS tips)
+    - Rewritten resume bullets
+    - Premium score breakdown
+    """
+    if not model or not premium_scorer or not rewriter:
+        raise HTTPException(status_code=503, detail="Model not loaded. Please wait for startup.")
+    
+    try:
+        # Calculate premium match score
+        score_result = premium_scorer.score_match(
+            request.resumeText,
+            request.jobText
+        )
+        
+        final_score = score_result['calibratedScore']  # Use calibrated score
+        top_matches = score_result['topMatches']
+        missing = score_result['missingKeywords']
+        must_have_missing = score_result.get('mustHaveMissing', [])
+        preferred_missing = score_result.get('preferredMissing', [])
+        was_truncated = score_result.get('wasTruncated', False)
+        
+        # Build premium breakdown
+        premium_breakdown = {
+            'bm25Score': score_result.get('bm25Score', 0),
+            'semanticRetrievalScore': score_result.get('semanticRetrievalScore', 0),
+            'rerankScore': score_result.get('rerankScore', 0),
+            'evidenceScore': score_result.get('evidenceScore', 0),
+            'calibratedScore': score_result.get('calibratedScore', 0),
+            'rawScore': score_result.get('rawScore', 0),
+            'constrainedScore': score_result.get('constrainedScore', 0),
+            'capApplied': score_result.get('capApplied', False),
+            'mustHavePenalty': score_result.get('mustHavePenalty', 0),
+            'missingMustHaveCount': score_result.get('missingMustHaveCount', 0)
+        }
+        
+        # Generate insights (reuse same function)
+        # Create a compatible score_breakdown for insights
+        score_breakdown = {
+            'keywordScore': score_result.get('bm25Score', 0),  # Use BM25 as keyword equivalent
+            'semanticScore': score_result.get('semanticRetrievalScore', 0),
+            'evidenceScore': score_result.get('evidenceScore', 0),
+            'capApplied': score_result.get('capApplied', False),
+            'mustHavePenalty': score_result.get('mustHavePenalty', 0),
+            'missingMustHaveCount': score_result.get('missingMustHaveCount', 0)
+        }
+        
+        insights = generate_insights(
+            final_score, 
+            top_matches, 
+            missing,
+            must_have_missing,
+            preferred_missing,
+            score_breakdown,
+            was_truncated
+        )
+        
+        # Rewrite resume bullets
+        rewritten_bullets = rewriter.rewrite_bullets(request.resumeText, count=3)
+        
+        return PremiumAnalyzeResponse(
+            score=final_score,
+            topMatches=top_matches,
+            missingKeywords=missing,
+            insights=insights,
+            rewrittenBullets=rewritten_bullets,
+            premiumBreakdown=premium_breakdown,
+            mustHaveMissing=must_have_missing if must_have_missing else None,
+            preferredMissing=preferred_missing if preferred_missing else None,
+            wasTruncated=was_truncated
+        )
+    
+    except Exception as e:
+        # Log error but don't expose internal details
+        print(f"Premium analysis error: {e}")
+        raise HTTPException(status_code=500, detail="Premium analysis failed. Please check your input.")
 
 
 def generate_insights(

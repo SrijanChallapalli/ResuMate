@@ -34,6 +34,20 @@ class AnalyzeResponse(BaseModel):
     preferredMissing: Optional[List[str]] = Field(None, description="Preferred skills missing from resume")
 
 
+class PremiumAnalyzeResponse(BaseModel):
+    """Response schema for premium resume-job matching analysis."""
+    score: float = Field(..., ge=0, le=100, description="Calibrated match score from 0-100")
+    topMatches: List[str] = Field(..., description="Top matching skills/keywords")
+    missingKeywords: List[str] = Field(..., description="Missing skills/keywords from job description")
+    insights: dict = Field(..., description="Analysis insights including strengths, improvements, and ATS tips")
+    rewrittenBullets: List[str] = Field(..., description="Three rewritten resume bullets in FAANG style")
+    # Premium breakdown fields
+    premiumBreakdown: Optional[dict] = Field(None, description="Premium score breakdown: bm25Score, semanticRetrievalScore, rerankScore, evidenceScore, calibratedScore, rawScore, constrainedScore, capApplied, mustHavePenalty, missingMustHaveCount")
+    mustHaveMissing: Optional[List[str]] = Field(None, description="Must-have requirements missing from resume")
+    preferredMissing: Optional[List[str]] = Field(None, description="Preferred skills missing from resume")
+    wasTruncated: Optional[bool] = Field(None, description="Whether resume or job text was truncated")
+
+
 class UploadResumeResponse(BaseModel):
     """Response schema for resume file upload."""
     resumeText: str = Field(..., description="Extracted resume text")
