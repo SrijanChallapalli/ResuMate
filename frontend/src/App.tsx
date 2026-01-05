@@ -7,6 +7,7 @@ import { CardNav } from './components/reactbits/CardNav'
 import { FolderUpload } from './components/reactbits/FolderUpload'
 
 function App() {
+  const [mode, setMode] = useState<'classic' | 'premium'>('classic')
   const [resumeText, setResumeText] = useState('')
   const [jobText, setJobText] = useState('')
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -40,9 +41,11 @@ function App() {
       const formData = new FormData()
       formData.append('file', file)
 
-      const url = 'http://localhost:8000/api/upload-resume'
+      const url = mode === 'premium' 
+        ? 'http://localhost:8000/api/upload-resume-premium'
+        : 'http://localhost:8000/api/upload-resume'
       console.log('[FRONTEND] Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type)
-      console.log('[FRONTEND] Request URL:', url)
+      console.log('[FRONTEND] Request URL:', url, 'Mode:', mode)
 
       const response = await fetch(url, {
         method: 'POST',
@@ -94,7 +97,10 @@ function App() {
     setResult(null)
 
     try {
-      const response = await fetch('http://localhost:8000/api/analyze', {
+      const url = mode === 'premium'
+        ? 'http://localhost:8000/api/analyze-premium'
+        : 'http://localhost:8000/api/analyze'
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,12 +144,23 @@ function App() {
   }
 
   const getScoreBreakdown = () => {
+    // Premium mode: use premiumBreakdown
+    if (mode === 'premium' && result?.premiumBreakdown) {
+      return {
+        bm25: result.premiumBreakdown.bm25Score,
+        semantic: result.premiumBreakdown.semanticRetrievalScore,
+        rerank: result.premiumBreakdown.rerankScore,
+        evidence: result.premiumBreakdown.evidenceScore,
+        isPremium: true
+      }
+    }
+    // Classic mode: use scoreBreakdown
     if (result?.scoreBreakdown) {
-      // Use actual backend data if available
       return {
         semantic: result.scoreBreakdown.semanticScore,
         keywords: result.scoreBreakdown.keywordScore,
-        evidence: result.scoreBreakdown.evidenceScore || 0
+        evidence: result.scoreBreakdown.evidenceScore || 0,
+        isPremium: false
       }
     }
     // Fallback estimation
@@ -153,7 +170,8 @@ function App() {
     return {
       semantic: Math.min(100, semanticEstimate * 1.2),
       keywords: Math.min(100, keywordEstimate * 1.3),
-      evidence: Math.min(100, evidenceEstimate * 1.5)
+      evidence: Math.min(100, evidenceEstimate * 1.5),
+      isPremium: false
     }
   }
 
@@ -183,6 +201,35 @@ function App() {
               <span className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30 rounded-full">
                 Local AI
               </span>
+            </div>
+            {/* Mode Tabs */}
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => {
+                  setMode('classic')
+                  setResult(null)
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                  mode === 'classic'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100'
+                }`}
+              >
+                Classic
+              </button>
+              <button
+                onClick={() => {
+                  setMode('premium')
+                  setResult(null)
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                  mode === 'premium'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100'
+                }`}
+              >
+                Premium (Beta)
+              </button>
             </div>
           </div>
         </div>
@@ -392,62 +439,144 @@ function App() {
                 {/* Score Breakdown */}
                 {breakdown && (
                   <div className="flex-1 max-w-md space-y-4">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-4">Score Breakdown</h3>
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                          Keyword Match (55%)
-                        </span>
-                        <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{breakdown.keywords.toFixed(1)}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-1000"
-                          style={{ width: `${breakdown.keywords}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                          Semantic Match (35%)
-                        </span>
-                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{breakdown.semantic.toFixed(1)}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-1000"
-                          style={{ width: `${breakdown.semantic}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    {breakdown && breakdown.evidence > 0 && (
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                            Evidence Score (10%)
-                          </span>
-                          <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{breakdown.evidence.toFixed(1)}</span>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-4">
+                      Score Breakdown {breakdown.isPremium && <span className="text-sm text-blue-600">(Premium)</span>}
+                    </h3>
+                    
+                    {/* Premium Mode Breakdown */}
+                    {breakdown.isPremium ? (
+                      <>
+                        <div>
+                          <div className="flex justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                              BM25 Keyword (35%)
+                            </span>
+                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{breakdown.bm25?.toFixed(1) || 0}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${breakdown.bm25 || 0}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-1000"
-                            style={{ width: `${breakdown.evidence}%` }}
-                          ></div>
+                        <div>
+                          <div className="flex justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                              Semantic Retrieval (35%)
+                            </span>
+                            <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{breakdown.semantic?.toFixed(1) || 0}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${breakdown.semantic || 0}%` }}
+                            ></div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {result?.scoreBreakdown?.capApplied && (
-                      <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                        <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">Score Capped at 70</p>
-                        <p className="text-xs text-yellow-600 dark:text-yellow-500">Due to missing must-have requirements</p>
-                      </div>
-                    )}
-                    {result?.scoreBreakdown?.mustHavePenalty > 0 && (
-                      <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                        <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">Penalty Applied: -{result.scoreBreakdown.mustHavePenalty.toFixed(0)} points</p>
-                        <p className="text-xs text-red-600 dark:text-red-500">{result.scoreBreakdown.missingMustHaveCount} must-have skill(s) missing</p>
-                      </div>
+                        <div>
+                          <div className="flex justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                              Cross-Encoder Rerank (20%)
+                            </span>
+                            <span className="text-sm font-bold text-green-600 dark:text-green-400">{breakdown.rerank?.toFixed(1) || 0}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${breakdown.rerank || 0}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        {breakdown.evidence > 0 && (
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                                Evidence Score (10%)
+                              </span>
+                              <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{breakdown.evidence.toFixed(1)}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-1000"
+                                style={{ width: `${breakdown.evidence}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+                        {result?.premiumBreakdown?.capApplied && (
+                          <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">Score Capped at 70</p>
+                            <p className="text-xs text-yellow-600 dark:text-yellow-500">Due to missing must-have requirements</p>
+                          </div>
+                        )}
+                        {result?.premiumBreakdown?.mustHavePenalty > 0 && (
+                          <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">Penalty Applied: -{result.premiumBreakdown.mustHavePenalty.toFixed(0)} points</p>
+                            <p className="text-xs text-red-600 dark:text-red-500">{result.premiumBreakdown.missingMustHaveCount} must-have skill(s) missing</p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Classic Mode Breakdown */
+                      <>
+                        <div>
+                          <div className="flex justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                              Keyword Match (55%)
+                            </span>
+                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{breakdown.keywords?.toFixed(1) || 0}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${breakdown.keywords || 0}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                              Semantic Match (35%)
+                            </span>
+                            <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{breakdown.semantic?.toFixed(1) || 0}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all duration-1000"
+                              style={{ width: `${breakdown.semantic || 0}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        {breakdown.evidence > 0 && (
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                                Evidence Score (10%)
+                              </span>
+                              <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{breakdown.evidence.toFixed(1)}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-1000"
+                                style={{ width: `${breakdown.evidence}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+                        {result?.scoreBreakdown?.capApplied && (
+                          <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-1">Score Capped at 70</p>
+                            <p className="text-xs text-yellow-600 dark:text-yellow-500">Due to missing must-have requirements</p>
+                          </div>
+                        )}
+                        {result?.scoreBreakdown?.mustHavePenalty > 0 && (
+                          <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">Penalty Applied: -{result.scoreBreakdown.mustHavePenalty.toFixed(0)} points</p>
+                            <p className="text-xs text-red-600 dark:text-red-500">{result.scoreBreakdown.missingMustHaveCount} must-have skill(s) missing</p>
+                          </div>
+                        )}
+                      </>
                     )}
                     {result?.mustHaveMissing && result.mustHaveMissing.length > 0 && (
                       <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">

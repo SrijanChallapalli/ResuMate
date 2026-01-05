@@ -22,8 +22,22 @@ export interface AnalysisResult {
     mustHavePenalty: number
     missingMustHaveCount: number
   }
+  // Premium breakdown fields (optional)
+  premiumBreakdown?: {
+    bm25Score: number
+    semanticRetrievalScore: number
+    rerankScore: number
+    evidenceScore: number
+    calibratedScore: number
+    rawScore: number
+    constrainedScore: number
+    capApplied: boolean
+    mustHavePenalty: number
+    missingMustHaveCount: number
+  }
   mustHaveMissing?: string[]
   preferredMissing?: string[]
+  wasTruncated?: boolean
 }
 
 export interface UploadResumeResponse {
